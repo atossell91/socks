@@ -47,13 +47,24 @@ namespace socks
             IPEndPoint ipe = new IPEndPoint(IPAddress.Any, port);
 
             EndPoint ep = (EndPoint)ipe;
-            //s.Blocking = true;
+            s.Blocking = false;
             int byteLen;
             byteLen = s.ReceiveFrom(buffer, ref ep);
-            printTextLine("Port " + port + " says: " + ASCIIEncoding.ASCII.GetString(buffer, 0, byteLen));
+            Array.Resize(ref buffer, byteLen);
+            Packet p = new Packet(buffer);
+            if (p.getType() == (Byte)Packet.PacketType.Data)
+            {
+                printTextLine("Received packet contains: " + Encoding.ASCII.GetString(p.getPayload()));
+                int ackBytes = s.SendTo(Packet.ACK_Pack().Data, ep);
+                printTextLine("Sent Ack: " + ackBytes + " bytes");
+            }
+            else
+            {
+                printTextLine("Packet type is: " + (int)p.getType());
+            }
             return true;
         }
-        bool send(Socket s, string host, int port, string message)
+        bool send(Socket s, string host, int port, Packet[] packs)
         {
             if (s == null)
             {
@@ -63,7 +74,10 @@ namespace socks
             IPAddress[] ip4s = Array.FindAll(ips, (a) => a.AddressFamily == AddressFamily.InterNetwork);
             IPEndPoint remote = new IPEndPoint(ip4s[0], port);
             EndPoint end = (EndPoint)remote;
-            s.SendTo(Encoding.ASCII.GetBytes(message), end);
+            foreach (Packet pack in packs)
+            {
+                s.SendTo(pack.Data, end);
+            }
             return true;
         }
         private void B_listen_Click(object sender, EventArgs e)
@@ -79,7 +93,7 @@ namespace socks
             }
             catch (Exception exp)
             {
-                printTextLine("An excpetion has occurred " + exp.Message);
+                printTextLine("A receiving excpetion has occurred " + exp.Message);
             }
         }
 
@@ -88,17 +102,19 @@ namespace socks
             string hostname = tb_hostname.Text;
             string message = tb_message.Text;
             int port = (int)nud_sendport.Value;
-            printTextLine("Sending message to " + hostname + " (Port " + port + ")");
+            Packet[] packs = Packer.PackageData(
+                Encoding.ASCII.GetBytes(tb_message.Text));
+            printTextLine("Sending " + packs.Length + " packets to " + hostname + " (Port " + port + ")");
             try
             {
-                if (!send(sendSock, hostname, port, message))
+                if (!send(sendSock, hostname, port, packs))
                 {
                     MessageBox.Show("A sending error has occurred.");
                 }
             }
             catch (Exception exp)
             {
-                printTextLine("An exception occurred: " + exp.Message);
+                printTextLine("A sending exception occurred: " + exp.Message);
             }
         }
         void bindReceiver(int port)
@@ -116,6 +132,12 @@ namespace socks
         {
             int port = (int)nud_receiveport.Value;
             bindReceiver(port);
+        }
+
+        private void Button1_Click(object sender, EventArgs e)
+        {
+            Packet[] packets = Packer.PackageData(Encoding.ASCII.GetBytes(tb_message.Text));
+            printTextLine("Number of packets: " + packets.Length);
         }
     }
 }
