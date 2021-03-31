@@ -59,8 +59,9 @@ namespace socks
             {
                 return false;
             }
-            IPAddress ip = Dns.GetHostAddresses(host)[1]; //[0] is ipv6, [1] is ipv4. This may not always be true. Find a better solution.
-            IPEndPoint remote = new IPEndPoint(ip, port);
+            IPAddress[] ips = Dns.GetHostAddresses(host); //[0] is ipv6, [1] is ipv4. This may not always be true. Find a better solution.
+            IPAddress[] ip4s = Array.FindAll(ips, (a) => a.AddressFamily == AddressFamily.InterNetwork);
+            IPEndPoint remote = new IPEndPoint(ip4s[0], port);
             EndPoint end = (EndPoint)remote;
             s.SendTo(Encoding.ASCII.GetBytes(message), end);
             return true;
