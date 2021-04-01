@@ -51,7 +51,8 @@ namespace socks
             Debug.WriteLine("Receiving packet.");
             if (s == null) return null;
 
-            s.Blocking = false;
+            s.Blocking = true;
+            s.ReceiveTimeout = 1000;
             Byte[] buffer = new byte[128];
             IPEndPoint ipe = new IPEndPoint(IPAddress.Any, port);
             EndPoint ep = (EndPoint)ipe;
