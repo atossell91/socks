@@ -26,6 +26,10 @@ namespace socks
         }
         public static Packet[] PackageData(Byte[] data)
         {
+            if (data.Length == 0)
+            {
+                return new Packet[]{new Packet(0)};
+            }
             int numPackets = data.Length / MaxPayloadSize;
 
             if (data.Length % MaxPayloadSize != 0) ++numPackets;

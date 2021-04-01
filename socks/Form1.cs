@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -20,8 +21,18 @@ namespace socks
         public Form1()
         {
             InitializeComponent();
+            loadHostnames();
             openSocket(ref sendSock, IPAddress.Any);
             bindReceiver((int)nud_receiveport.Value);
+        }
+        void loadHostnames()
+        {
+            string path = "hostnames.txt";
+            if (File.Exists(path))
+            {
+                string[] hnames = File.ReadAllLines(path);
+                comboBox1.Items.AddRange(hnames);
+            }
         }
         void printTextLine(string message)
         {
@@ -64,9 +75,12 @@ namespace socks
             Debug.WriteLine("Sending acknowledgement");
             int sendPort = (int)nud_sendport.Value;
             IPEndPoint remIp = new IPEndPoint(remoteip.Address, sendPort);
-            s.SendTo(Packet.ACK_Pack().Data, (EndPoint)remIp);
-            Debug.WriteLine("Acknowledgement sent to host " +
-                Dns.GetHostEntry(remIp.Address).HostName + ", on port " + remIp.Port);
+            if (p.getType() == (Byte)Packet.PacketType.Data)
+            {
+                s.SendTo(Packet.ACK_Pack().Data, (EndPoint)remIp);
+                Debug.WriteLine("Acknowledgement sent to host " +
+                    Dns.GetHostEntry(remIp.Address).HostName + ", on port " + remIp.Port);
+            }
             return p;
         }
         Packet[] recvAll(Socket s, int port)
@@ -94,9 +108,16 @@ namespace socks
             IPAddress[] ip4s = Array.FindAll(ips, (a) => a.AddressFamily == AddressFamily.InterNetwork);
             IPEndPoint remote = new IPEndPoint(ip4s[0], port);
             EndPoint end = (EndPoint)remote;
+            recvAll(recvSock, (int)nud_receiveport.Value);
             foreach (Packet pack in packs)
             {
                 s.SendTo(pack.Data, end);
+                Packet p = recv(recvSock, (int)nud_receiveport.Value);
+                if (p.getType() != (Byte)Packet.PacketType.Ack)
+                {
+                    printTextLine("Transmission error");
+                    return false;
+                }
             }
             return true;
         }
@@ -120,11 +141,24 @@ namespace socks
 
         private void B_send_Click(object sender, EventArgs e)
         {
-            string hostname = tb_hostname.Text;
+            string boxVal = comboBox1.Text;
+            if (!string.IsNullOrEmpty(boxVal) && !string.IsNullOrWhiteSpace(boxVal))
+            {
+                if (!comboBox1.Items.Contains(boxVal))
+                {
+                    comboBox1.Items.Add(boxVal);
+                }
+            }
+
+            string hostname = comboBox1.Text;
             string message = tb_message.Text;
+            if (string.IsNullOrEmpty(message))
+            {
+                message = "";
+            }
             int port = (int)nud_sendport.Value;
             Packet[] packs = Packer.PackageData(
-                Encoding.ASCII.GetBytes(tb_message.Text));
+                Encoding.ASCII.GetBytes(message));
             printTextLine("Sending " + packs.Length + " packets to " + hostname + " (Port " + port + ")");
             try
             {
@@ -159,6 +193,34 @@ namespace socks
         {
             Packet[] packets = Packer.PackageData(Encoding.ASCII.GetBytes(tb_message.Text));
             printTextLine("Number of packets: " + packets.Length);
+        }
+
+        private void comboBox1_TextUpdate(object sender, EventArgs e)
+        {
+            ComboBox cb = (ComboBox)sender;
+            char delChar = '*';
+            string str = cb.Text;
+            int len = str.Length;
+            if (string.IsNullOrEmpty(str)) return;
+            if (str[len-1] == delChar)
+            {
+                int ind = comboBox1.Items.IndexOf(str.Substring(0, len - 1));
+                if (ind > -1 && ind < comboBox1.Items.Count)
+                {
+                    comboBox1.Items.RemoveAt(ind);
+                }
+                comboBox1.Text = "";
+            }
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            List<string> hnames = new List<string>();
+            foreach (Object name in comboBox1.Items)
+            {
+                hnames.Add(name.ToString());
+            }
+            File.WriteAllLines("hostnames.txt", hnames.ToArray());
         }
     }
 }
