@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Net;
@@ -34,35 +35,54 @@ namespace socks
             }
             s = new Socket(ip.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
         }
-        bool listen(Socket s, int port)
+        Packet recv(Socket s, int port)
         {
-            if (s == null)
-            {
-                return false;
-            }
+            Debug.WriteLine("Receiving packet.");
+            if (s == null) return null;
 
-            Byte[] buffer = new byte[128];
-            //IPAddress ip = Dns.GetHostAddresses(host)[0];
-            //IPEndPoint remote = new IPEndPoint(ip, port);
-            IPEndPoint ipe = new IPEndPoint(IPAddress.Any, port);
-
-            EndPoint ep = (EndPoint)ipe;
             s.Blocking = false;
-            int byteLen;
-            byteLen = s.ReceiveFrom(buffer, ref ep);
+            Byte[] buffer = new byte[128];
+            IPEndPoint ipe = new IPEndPoint(IPAddress.Any, port);
+            EndPoint ep = (EndPoint)ipe;
+            int byteLen =0;
+            
+            try
+            {
+                byteLen = s.ReceiveFrom(buffer, ref ep);
+                Debug.WriteLine("Packet received. Size: " + byteLen);
+            }
+            catch (Exception e)
+            {
+                //printTextLine("A receiving error has occurred: " + e.Message);
+            }
+
+            if (byteLen == 0) return null;
+            
             Array.Resize(ref buffer, byteLen);
-            Packet p = new Packet(buffer);
-            if (p.getType() == (Byte)Packet.PacketType.Data)
+            Packet p = new Packet(buffer); IPEndPoint remoteip = (IPEndPoint)ep;
+
+            Debug.WriteLine("Sending acknowledgement");
+            int sendPort = (int)nud_sendport.Value;
+            IPEndPoint remIp = new IPEndPoint(remoteip.Address, sendPort);
+            s.SendTo(Packet.ACK_Pack().Data, (EndPoint)remIp);
+            Debug.WriteLine("Acknowledgement sent to host " +
+                Dns.GetHostEntry(remIp.Address).HostName + ", on port " + remIp.Port);
+            return p;
+        }
+        Packet[] recvAll(Socket s, int port)
+        {
+            List<Packet> inp = new List<Packet>();
+            while(true)
             {
-                printTextLine("Received packet contains: " + Encoding.ASCII.GetString(p.getPayload()));
-                int ackBytes = s.SendTo(Packet.ACK_Pack().Data, ep);
-                printTextLine("Sent Ack: " + ackBytes + " bytes");
+                Debug.WriteLine("recvAll: Receiving next packet.");
+                Packet p = recv(s, port);
+                if (p == null)
+                {
+                    break;
+                }
+                inp.Add(p);
             }
-            else
-            {
-                printTextLine("Packet type is: " + (int)p.getType());
-            }
-            return true;
+            return inp.ToArray();
         }
         bool send(Socket s, string host, int port, Packet[] packs)
         {
@@ -82,18 +102,19 @@ namespace socks
         }
         private void B_listen_Click(object sender, EventArgs e)
         {
-            try
+            Debug.WriteLine("Button clicked");
+            int port = (int)nud_receiveport.Value;
+            Packet[] p = recvAll(recvSock, port);
+            foreach(Packet pack in p)
             {
-                recvSock.ReceiveTimeout = 5000;
-                int port = (int)nud_receiveport.Value;
-                if (!listen(recvSock, port))
+                Debug.WriteLine("Reading received packets");
+                printTextLine("Packet type is: " +
+                    Packet.typeToString(pack.getType()));
+                if (pack.getType() == (Byte)Packet.PacketType.Data)
                 {
-                    MessageBox.Show("A receiving error has occurred.");
+                    printTextLine(
+                        Encoding.ASCII.GetString(pack.getPayload()));
                 }
-            }
-            catch (Exception exp)
-            {
-                printTextLine("A receiving excpetion has occurred " + exp.Message);
             }
         }
 

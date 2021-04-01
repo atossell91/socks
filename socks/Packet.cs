@@ -46,6 +46,21 @@ namespace socks
         {
             return new Packet(PacketType.Nack);
         }
+        public static string typeToString(Byte pt)
+        {
+            switch(pt)
+            {
+                case ((Byte)PacketType.Ack):
+                    return "ACK";
+                case ((Byte)PacketType.Nack):
+                    return "NACK";
+                case ((Byte)PacketType.Data):
+                    return "DATA";
+                default:
+                    return "ERR";
+
+            }
+        }
         public void SetType(Byte t)
         {
             Data[FieldTypeIndex] = t;
